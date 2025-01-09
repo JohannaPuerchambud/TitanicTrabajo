@@ -3,8 +3,8 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import classification_report, confusion_matrix
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
 import seaborn as sns
@@ -35,24 +35,37 @@ scaler = MinMaxScaler()
 X_train = scaler.fit_transform(X_train)
 X_test = scaler.transform(X_test)
 
-# Construir el modelo
+# Construir el modelo mejorado
 model = Sequential()
-model.add(Dense(7, activation='relu', input_dim=7))  # Capa de entrada con 7 neuronas
-model.add(Dense(2, activation='relu'))  # Capa intermedia con 2 neuronas (puede ajustarse)
-model.add(Dropout(0.2))  # Dropout para prevenir sobreajuste
-model.add(Dense(1, activation='sigmoid'))  # Capa de salida
+
+# Primera capa oculta
+model.add(Dense(64, input_dim=X_train.shape[1], activation='relu'))
+model.add(BatchNormalization())
+model.add(Dropout(0.3))
+
+# Segunda capa oculta
+model.add(Dense(32, activation='relu'))
+model.add(BatchNormalization())
+model.add(Dropout(0.3))
+
+# Tercera capa oculta
+model.add(Dense(16, activation='relu'))
+model.add(BatchNormalization())
+
+# Capa de salida
+model.add(Dense(1, activation='sigmoid'))
 model.summary()
 
 # Compilar el modelo
-opt = Adam(learning_rate=1e-2)
+opt = Adam(learning_rate=0.001)
 model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
 
 # Configurar EarlyStopping
 early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
 
 # Entrenar el modelo
-history = model.fit(X_train, y_train, epochs=100, batch_size=32, verbose=1,
-          validation_data=(X_test, y_test), callbacks=[early_stopping])
+history = model.fit(X_train, y_train, epochs=150, batch_size=32, verbose=1,
+                    validation_data=(X_test, y_test), callbacks=[early_stopping])
 
 # Evaluar el modelo
 y_pred = model.predict(X_test)
@@ -87,3 +100,17 @@ plt.show()
 # Guardar el modelo
 model.save('RNA_Titanic.h5')
 print("Modelo guardado como 'RNA_Titanic.h5'.")
+
+# Cargar el modelo guardado y recompilar
+loaded_model = load_model('RNA_Titanic.h5')
+loaded_model.compile(optimizer=Adam(learning_rate=0.001), loss='binary_crossentropy', metrics=['accuracy'])
+
+# Evaluar el modelo cargado
+loss, accuracy = loaded_model.evaluate(X_test, y_test, verbose=1)
+print(f"Loss: {loss}, Accuracy: {accuracy}")
+
+# Predicciones con el modelo cargado
+y_pred_loaded = loaded_model.predict(X_test)
+y_pred_loaded = (y_pred_loaded > 0.5)
+
+print("Classification Report (Loaded Model):\n", classification_report(y_test, y_pred_loaded))
